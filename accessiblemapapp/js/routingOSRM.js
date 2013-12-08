@@ -22,10 +22,15 @@ function extractCoordinates(data){
 	$(data).find('rtept').each(function(){
 		coords.push(new coordPair($(this)[0].attributes[0].value , $(this)[0].attributes[1].value));
 	});
-	checkCompass().done(function(compval){
-		getSide(compval, coords[0], coords[1], "routing");
-	});
-	fillRouteWithOverpassData(coords);
+	if(coords.length !== 0){
+		checkCompass().done(function(compval){
+			getSide(compval, coords[0], coords[1], "routing");
+		});
+		fillRouteWithOverpassData(coords);
+	}
+	else{
+		writeRoute(coords);
+	}
 	return coords;
 }
 function fillRouteWithOverpassData(routeCoords){
