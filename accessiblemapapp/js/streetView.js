@@ -9,6 +9,7 @@ var alreadyPrintedPoisRight = new Array();
 var alreadyPrintedPoisLeft = new Array();
 
 function getGPSLocation() {
+	var deferred = $.Deferred();
 	var options = {
 		enableHighAccuracy : true,
 		timeout : 5000,
@@ -25,9 +26,11 @@ function getGPSLocation() {
 			if(foundWay != "undefined"){
 				locatedWay = foundWay;
 				writeActualLocation(foundWay);
+				deferred.resolve();
 			}
 			else{
 				$('#locationOutput').html("Ihr Standort konnte nicht bestimmt werden, bitte geben Sie ihn manuell ein.");
+				deferred.resolve();
 			}
 		});
 	};
@@ -35,6 +38,7 @@ function getGPSLocation() {
 		alert('ERROR(' + err.code + '): ' + err.message);
 	};
 	navigator.geolocation.getCurrentPosition(success, error, options);
+	return deferred;
 }
 function refreshStreetView(){
 	getGPSLocation();
