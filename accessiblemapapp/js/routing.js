@@ -2,10 +2,11 @@ var destlat, destlon;
 var routeStart, routeEnd;
 
 function refreshRoute(){
-	getGPSLocation();
-	getRoute(locatedLat, locatedLon, destlat,destlon);
-	$( "#routingDirectionsRight").empty();
-	$( "#routingDirections").empty();
+	getGPSLocation().done(function(){
+		getRoute(locatedLat, locatedLon, destlat,destlon);
+		$( "#routingDirectionsRight").empty();
+		$( "#routingDirections").empty();
+	});
 }
 
 function reverseRoute(){
@@ -51,73 +52,81 @@ function writeHTMLButtons(){
 }
 // write the routing text
 function writeRoute(cords) {
-	writeHTMLButtons();
-	var tempRoute = [];
-	var distance,direction,degreesToNext;
-	var degreesToOverNext, azimuth;
-
-	var nextCoordinate = cords[0];
-	var overNextCoordinate = cords[1];
-	distance = calcDistance(routeStart.x, routeStart.y,	nextCoordinate.lat, nextCoordinate.lon);
+	if(cords.length === 0){
+		var html = "<p class=\"firstRouteStep\"> Sie haben Ihr Ziel erreicht.</p>";
+		$('#routingDirections').html(html + "</div>");
+		$('#routingDirections').trigger('create');
+		$('#contentRouting').trigger('create');
+		$('#routingDirectionsRight').html(html + "</div>");
+		$('#contentRoutingRight').trigger('create');
+	}else{
+		writeHTMLButtons();
+		var tempRoute = [];
+		var distance,direction,degreesToNext;
+		var degreesToOverNext, azimuth;
 	
-	//we need another step to get to the start of the route
-	//if we're on a mobile device we have a compass
-	checkCompass().done(function(compassvalue){
-		if(distance >= 0.0005){
-			degreesFromStart = calcCompassBearing(nextCoordinate.lat, nextCoordinate.lon,locatedLat, locatedLon,compassvalue);
-			degreesToNext = normaliseBearing(calcBearing(locatedLat, locatedLon, nextCoordinate.lat, nextCoordinate.lon));
-			degreesToOverNext =normaliseBearing(calcBearing(nextCoordinate.lat, nextCoordinate.lon,overNextCoordinate.lat, overNextCoordinate.lon));
-			
-			azimuth = getAzimuth(degreesToNext,degreesToOverNext);
-			console.log(azimuth);
-			direction = getDirectionForDegrees(degreesFromStart) + ", " + getDirectionForDegrees(azimuth)+".";
-		}else{
-			degreesToNext = calcCompassBearing(overNextCoordinate.lat, overNextCoordinate.lon,locatedLat, locatedLon, compassvalue);
-			direction = getDirectionForDegrees(degreesToNext);
-		}
-		tempRoute.push(new tempEntry(direction, distance, locatedLat, locatedLon,degreesToNext,""));
-
-		//rest of the route
-		$.each(cords, function(index, coordinate) {
-			if (index < (cords.length - 2)) {
-				nextCoordinate = cords[index + 1];
-				degreesToNext = calcBearing(coordinate.lat, coordinate.lon,nextCoordinate.lat, nextCoordinate.lon);
+		var nextCoordinate = cords[0];
+		var overNextCoordinate = cords[1];
+		distance = calcDistance(routeStart.x, routeStart.y,	nextCoordinate.lat, nextCoordinate.lon);
+		
+		//we need another step to get to the start of the route
+		//if we're on a mobile device we have a compass
+		checkCompass().done(function(compassvalue){
+			if(distance >= 0.0005){
+				degreesFromStart = calcCompassBearing(nextCoordinate.lat, nextCoordinate.lon,locatedLat, locatedLon,compassvalue);
+				degreesToNext = normaliseBearing(calcBearing(locatedLat, locatedLon, nextCoordinate.lat, nextCoordinate.lon));
+				degreesToOverNext =normaliseBearing(calcBearing(nextCoordinate.lat, nextCoordinate.lon,overNextCoordinate.lat, overNextCoordinate.lon));
 				
-				overNextCoordinate =  cords[index + 2];
-				degreesToOverNext = calcBearing(nextCoordinate.lat, nextCoordinate.lon,overNextCoordinate.lat, overNextCoordinate.lon, 0);
 				azimuth = getAzimuth(degreesToNext,degreesToOverNext);
-				
-				direction = getDirectionForDegrees(azimuth);
-				distance = calcDistance(coordinate.lat, coordinate.lon,	nextCoordinate.lat, nextCoordinate.lon);
-				
-				var way = getWayMatchForCord(coordinate.lat, coordinate.lon);
-				
-				if(typeof way != "undefined"){
+				direction = getDirectionForDegrees(degreesFromStart) + ", " + getDirectionForDegrees(azimuth)+".";
+			}else{
+				degreesToNext = calcCompassBearing(overNextCoordinate.lat, overNextCoordinate.lon,locatedLat, locatedLon, compassvalue);
+				direction = getDirectionForDegrees(degreesToNext);
+			}
+			tempRoute.push(new tempEntry(direction, distance, locatedLat, locatedLon,degreesToNext,""));
+	
+			//rest of the route
+			$.each(cords, function(index, coordinate) {
+				if (index < (cords.length - 2)) {
+					nextCoordinate = cords[index + 1];
+					degreesToNext = calcBearing(coordinate.lat, coordinate.lon,nextCoordinate.lat, nextCoordinate.lon);
+					
+					overNextCoordinate =  cords[index + 2];
+					degreesToOverNext = calcBearing(nextCoordinate.lat, nextCoordinate.lon,overNextCoordinate.lat, overNextCoordinate.lon, 0);
+					azimuth = getAzimuth(degreesToNext,degreesToOverNext);
+					
+					direction = getDirectionForDegrees(azimuth);
+					distance = calcDistance(coordinate.lat, coordinate.lon,	nextCoordinate.lat, nextCoordinate.lon);
+					
+					var way = getWayMatchForCord(coordinate.lat, coordinate.lon);
+					
+					if(typeof way != "undefined"){
+						tempRoute.push(new tempEntry(direction, distance, 	coordinate.lat, coordinate.lon,degreesToNext,way));
+					}
+					else{
+						tempRoute.push(new tempEntry(direction, distance, 	coordinate.lat, coordinate.lon,degreesToNext,""));
+					}
+				}else if(index == (cords.length-2)){
+					nextCoordinate = cords[index + 1];
+					degreesToNext = normaliseBearing(calcBearing(coordinate.lat, coordinate.lon,nextCoordinate.lat, nextCoordinate.lon));
+					distance = calcDistance(coordinate.lat, coordinate.lon,	nextCoordinate.lat, nextCoordinate.lon);
+					direction = getDirectionForDegrees(degreesToNext);
+					
+					var way = getWayMatchForCord(coordinate.lat, coordinate.lon);
 					tempRoute.push(new tempEntry(direction, distance, 	coordinate.lat, coordinate.lon,degreesToNext,way));
 				}
 				else{
-					tempRoute.push(new tempEntry(direction, distance, 	coordinate.lat, coordinate.lon,degreesToNext,""));
+					tempRoute.push(new tempEntry("end", 0, 	coordinate.lat, coordinate.lon,"",""));
+					
 				}
-			}else if(index == (cords.length-2)){
-				nextCoordinate = cords[index + 1];
-				degreesToNext = normaliseBearing(calcBearing(coordinate.lat, coordinate.lon,nextCoordinate.lat, nextCoordinate.lon));
-				distance = calcDistance(coordinate.lat, coordinate.lon,	nextCoordinate.lat, nextCoordinate.lon);
-				direction = getDirectionForDegrees(degreesToNext);
-				
-				var way = getWayMatchForCord(coordinate.lat, coordinate.lon);
-				tempRoute.push(new tempEntry(direction, distance, 	coordinate.lat, coordinate.lon,degreesToNext,way));
-			}
-			else{
-				tempRoute.push(new tempEntry("end", 0, 	coordinate.lat, coordinate.lon,"",""));
-				
-			}
+			});
+			var cleanedRoute = cleanRoute(tempRoute);
+			enricheWays(cleanedRoute).done(function(enrichedRoute){
+				writeApp(enrichedRoute, "left");
+				writeApp(enrichedRoute, "right");
+			});
 		});
-		var cleanedRoute = cleanRoute(tempRoute);
-		enricheWays(cleanedRoute).done(function(enrichedRoute){
-			writeApp(enrichedRoute, "left");
-			writeApp(enrichedRoute, "right");
-		});
-	});
+	}
 }
 function waymatch(wayId, tags){
 	this.wayId = wayId;
