@@ -29,6 +29,7 @@ function extractCoordinates(data){
 		fillRouteWithOverpassData(coords);
 	}
 	else{
+		$.mobile.changePage($("#routing"), "none");
 		writeRoute(coords);
 	}
 	return coords;
@@ -37,25 +38,34 @@ function fillRouteWithOverpassData(routeCoords){
 	allPaths = [];
 	allNodes = [];
 	allWaysWithNodeCoords = [];
-	var ajaxcounter = routeCoords.length;
+	var bbox = getMinMaxForRoute(routeCoords);
 	// go trough all coords of the route
-	$.each(routeCoords, function(indexCoord, coord){
-		// search for every coord in overpass
-		searchOverpassForNearestNode(coord,'way["highway"]').done(function(allWays,allNodesResult){
-			ajaxcounter--;
-			$.each(allWays, function(index, path){
-				allPaths.push(path);
-			});
-			$.each(allNodesResult, function(index, node){
-				allNodes.push(node);
-			});
-			if(ajaxcounter==0){
-				searchNearestNodes();
-				fillDataFromOSM();
-				checkRouteOSRM();
-				writeRoute(coords);
-			}
+	searchOverpassForNearestNode(bbox,'way["highway"]').done(function(allWays,allNodesResult){
+		$.each(allWays, function(index, path){
+			allPaths.push(path);
 		});
+		$.each(allNodesResult, function(index, node){
+			allNodes.push(node);
+		});
+		searchNearestNodes();
+		fillDataFromOSM();
+		checkRouteOSRM();
+		var wayVectors = [];
+	        $.each(allPaths, function(i, path){
+	    		var nodes = [];
+	    		//get all nodes of way
+	    		$.each(path.nodes, function(index, node){
+	    			//get node info but not for the last
+	    			var nodeInfo = getNodeInfo(node, allNodes);
+	    			nodes.push(new point(nodeInfo.lat, nodeInfo.lon));
+	    			//if all nodeinfo is here
+	    			if(nodes.length === path.nodes.length){
+	    				var wayVec = new wayVector(path.id, nodes, path.tags);
+	    				wayVectors.push(wayVec);
+	    			}
+	    		});
+	    	});
+		writeRoute(coords, wayVectors);
 	});
 }
 function searchNearestNodes(){
@@ -133,7 +143,6 @@ function checkRouteOSRM(){
 			var nextcoord = coords[index+1];
 			var nearestNodesNextCordArr = $.grep(nodesOfRoute, function(node){ return ((node.lat == nextcoord.lat) && (node.lon == nextcoord.lon)); });
 			var nearestNodeNextCord = nearestNodesNextCordArr[0];
-	
 		}	
 		//if first node is the same as the second we take the located way
 		if((index == 0) && (nearestNode.id == nearestNodeNextCord.id)){
@@ -190,7 +199,6 @@ function checkRouteOSRM(){
 											return false;
 										}
 									});
-		
 								});
 							}
 						}
