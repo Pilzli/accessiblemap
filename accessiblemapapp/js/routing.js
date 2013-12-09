@@ -121,7 +121,8 @@ function writeRoute(cords) {
 				}
 			});
 			var cleanedRoute = cleanRoute(tempRoute);
-			enricheWays(cleanedRoute).done(function(enrichedRoute){
+			var warnings = getIsecWarnings(wayVectors);
+			enricheWays(cleanedRoute,warnings).done(function(enrichedRoute){
 				writeApp(enrichedRoute, "left");
 				writeApp(enrichedRoute, "right");
 			});
