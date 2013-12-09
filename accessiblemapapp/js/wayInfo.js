@@ -4,28 +4,43 @@ var OPDistance = 0.3;
 var today;	
 var lat, lon;
 
-function enricheWays(route){
+function enricheWays(route, warnings){
 	orientationContent = [];
 	var deferred = $.Deferred();
 	var enrichedRoute = [];
 	var selectedPois = getSelectedRoutingElements();
-	getOrientationPoints(route, selectedPois, intersections).done(function(){
+	getDate();
+	getOrientationPoints(route, selectedPois, intersections).done(function(){		
 		$.each(route, function(index, coordinate){
+			var poisOnLeftSide = [];
+			var poisOnRightSide = [];
 			if(index <= (route.length-2)){
+				//add warnings
+				var bothSides = fillPoisInBothSidesRoute(selectedPois, warnings, "overlapwarnings", coordinate);
+				poisOnLeftSide = bothSides.concat(poisOnLeftSide);
+				poisOnRightSide = bothSides.concat(poisOnRightSide);
+				
+				//add roadworks
+				bothSides = fillPoisInBothSidesRoute(selectedPois, roadworks, "roadworks", coordinate);
+				poisOnLeftSide = bothSides.concat(poisOnLeftSide);
+				poisOnRightSide = bothSides.concat(poisOnRightSide);
+				
 				var nextCoordinate = route[index + 1];
 				var degreesToNext = calcBearing(coordinate.lat, coordinate.lon,	nextCoordinate.lat, nextCoordinate.lon);
 				var sideBuffers = calculateSideBuffers(coordinate.lat, coordinate.lon, nextCoordinate.lat, nextCoordinate.lon, degreesToNext);
 				
 				var poisInLeftStreetSegment = getPointsInBuffer(sideBuffers[0], orientationContent, coordinate.lat,coordinate.lon, coordinate.distance);
-				poisInLeftStreetSegment.sort(distanceSort);
+				poisOnLeftSide = poisInLeftStreetSegment.concat(poisOnLeftSide);
+				poisOnLeftSide.sort(distanceSort);
 				
 				var poisInRightStreetSegment = getPointsInBuffer(sideBuffers[1], orientationContent,  coordinate.lat,coordinate.lon, coordinate.distance);
-				poisInRightStreetSegment.sort(distanceSort);
+				poisOnRightSide = poisInRightStreetSegment.concat(poisOnRightSide);
+				poisOnRightSide.sort(distanceSort);
 				
 				if(typeof coordinate.way != "undefined") {
-					enrichedRoute.push(new finalElement(coordinate.distance, coordinate.direction, coordinate.lat,coordinate.lon,coordinate.way.tags, poisInLeftStreetSegment, poisInRightStreetSegment,coordinate.way));
+					enrichedRoute.push(new finalElement(coordinate.distance, coordinate.direction, coordinate.lat,coordinate.lon,coordinate.way.tags, poisOnLeftSide, poisOnRightSide,coordinate.way));
 				}else{
-					enrichedRoute.push(new finalElement(coordinate.distance, coordinate.direction, coordinate.lat,coordinate.lon, "", poisInLeftStreetSegment, poisInRightStreetSegment,""));
+					enrichedRoute.push(new finalElement(coordinate.distance, coordinate.direction, coordinate.lat,coordinate.lon, "", poisOnLeftSide, poisOnRightSide,""));
 				}
 			}
 			else if(index === (route.length-1)){
@@ -35,6 +50,29 @@ function enricheWays(route){
 		});
 	});
 	return deferred;
+}
+
+function fillPoisInBothSidesRoute(selPois, poiList, keyword, coord){
+	var poisOnBothSides = [];
+	if($.inArray(keyword, selPois)!==-1){
+		$.each(poiList, function(index, poi){
+			if(typeof poi.wayIds!=="undefined"){
+				if((coord.way !== "" && typeof coord.way !== "undefined" && typeof coord.way.wayId !== "undefined")&&(coord.way.wayId === poi.wayIds[0] || coord.way.wayId === poi.wayIds[1])){
+					var dist = calcDistance(coord.lat, coord.lon, poi.lat, poi.lon);
+					if((dist*1000)<coord.distance){
+						poisOnBothSides.push(new orientationEntry(poi.lat, poi.lon, poi.keyword, poi.tags, dist));
+					}
+				}
+			}else
+				if((coord.way !== "" && typeof coord.way !== "undefined" && typeof coord.way.wayId !== "undefined")&&(coord.way.wayId === poi.wayId)){
+					var dist = calcDistance(coord.lat, coord.lon, poi.lat, poi.lon);
+					if((dist*1000)<=coord.distance){
+						poisOnBothSides.push(new orientationEntry(poi.lat, poi.lon, poi.keyword, poi.tags, dist));
+					}
+				}
+		});
+	}
+	return poisOnBothSides;
 }
 
 function enrichStreetWay(locatedWay, intersections, warnings, locLat, locLon){
@@ -52,11 +90,7 @@ function enrichStreetWay(locatedWay, intersections, warnings, locLat, locLon){
 			route.push(new tempEntry("", "", node.x, node.y, "",locatedWay.way));
 		}
 	})
-	//get Date to test, if roadworks are actual
-	today = new Date();
-	var day = today.getDate();
-	var month = today.getMonth()+1; //January is 0!
-	today = today.getFullYear() + (month<10 ? '0' : '') + month + (day<10 ? '0' : '') + day;
+	getDate();
 	
 	var enrichedRoute = [];
 	roadworks = [];
@@ -71,7 +105,7 @@ function enrichStreetWay(locatedWay, intersections, warnings, locLat, locLon){
 			poisOnRightSide = bothSides.concat(poisOnRightSide);
 	
 			//add warnings
-			bothSides = fillPoisInBothSides(selectedPois, warnings, "warnings");
+			bothSides = fillPoisInBothSides(selectedPois, warnings, "overlapwarnings");
 			poisOnLeftSide = bothSides.concat(poisOnLeftSide);
 			poisOnRightSide = bothSides.concat(poisOnRightSide);
 	
@@ -230,39 +264,45 @@ function getRoadworks(route){
 				type : 'GET',
 				dataType : 'json',
 				error : function(data) {
-					console.error("error");
 					deferred.resolve();
 				},
 				success : function(data) {
-					data = data.features;
-					$.each(data, function(index, roadwork){
-						var startDate = roadwork.properties.traffic_obstruction_start.split(" ")[0];
-						var tempString = startDate.split("-");
-						startDate = tempString[0]+tempString[1]+tempString[2];
-						var endDate = roadwork.properties.traffic_obstruction_end.split(" ")[0];
-						var tempString = endDate.split("-");
-						endDate = tempString[0]+tempString[1]+tempString[2];
-						
-						//test if roadwork is in process
-						if(startDate<today && endDate>today){
-							var nearestNode = findNearestRoadworkNode(coord, roadwork.geometry.coordinates);
-							var entry = new orientationEntry(nearestNode[1], nearestNode[0], "roadwork", roadwork.properties);
-							if(roadworks.length===0){
-								roadworks.push(entry);
-							}
-							//don't push duplicates
-							$.each(roadworks, function(i, rw){
-								if(!(entry.lat === rw.lat)&&!(entry.lon === rw.lon)){
+					if(data!== null){
+						var features = data.features;
+						$.each(features, function(index, roadwork){
+							var startDate = roadwork.properties.traffic_obstruction_start.split(" ")[0];
+							var tempString = startDate.split("-");
+							startDate = tempString[0]+tempString[1]+tempString[2];
+							var endDate = roadwork.properties.traffic_obstruction_end.split(" ")[0];
+							tempString = endDate.split("-");
+							endDate = tempString[0]+tempString[1]+tempString[2];
+							
+							//test if roadwork is in process
+							if(startDate<today && endDate>today){
+								var nearestNode = findNearestRoadworkNode(coord, roadwork.geometry.coordinates);
+								var entry = new roadworkEntry(nearestNode[1], nearestNode[0], coord.way.wayId,roadwork.properties);
+								if(roadworks.length===0){
 									roadworks.push(entry);
 								}
-							});
+								//don't push duplicates
+								$.each(roadworks, function(i, rw){
+									if(!(entry.lat === rw.lat)&&!(entry.lon === rw.lon)){
+										roadworks.push(entry);
+									}
+								});
+							}
+						});
+						counter--;
+						if(counter === 0){
+							deferred.resolve();
 						}
-					});
-					counter--;
-					if(counter === 0){
-						deferred.resolve();
+					}else{
+						counter--;
+						if(counter === 0){
+							deferred.resolve();				
+						}
 					}
-				},
+				}
 			});
 		}else{
 			counter--;
@@ -343,10 +383,10 @@ function getPoisForKeyWord(bbox, keyWord){
 	});
 	return deferred;
 }
-function orientationEntry(lat,lon,keyword, tags, distance){
-	this.lat = lat;
-	this.lon = lon;
-	this.keyword = keyword;
-	this.tags = tags;
-	this.distance = distance;
+function getDate(){
+	//get Date to test, if roadworks are actual
+	today = new Date();
+	var day = today.getDate();
+	var month = today.getMonth()+1; //January is 0!
+	today = today.getFullYear() + (month<10 ? '0' : '') + month + (day<10 ? '0' : '') + day;
 }
