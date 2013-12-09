@@ -97,3 +97,11 @@ function intersection(lat, lon, wayTagsA, wayTagsB, keyword, wayIdA, wayIdB) {
 	wayIds.push(wayIdB);
 	this.wayIds = wayIds;
 }
+
+function roadworkEntry(lat, lon, wayId, tags){
+	this.lat = lat;
+	this.lon = lon;
+	this.keyword = "roadwork";
+	this.wayId = wayId;
+	this.tags = tags;
+}
