@@ -586,12 +586,12 @@ function isAlreadyInIntersections(intersection, intersections) {
 	return alreadyIn;
 }
 
-function getIsecWarnings(wayVectors){
+function getIsecWarnings(paths){
 	var warnings = [];
-	$.each(wayVectors, function(index, way){
+	$.each(paths, function(index, way){
 		if((way.tags.bridge!=="yes")&&(way.tags.tunnel!=="yes")){
-			for(var i=index+1; i<wayVectors.length; i++){
-				var nextWay = wayVectors[i];
+			for(var i=index+1; i<paths.length; i++){
+				var nextWay = paths[i];
 				if((nextWay.tags.bridge!=="yes")&&(nextWay.tags.tunnel!=="yes")){
 					var warning = testOverlap(way, nextWay);
 					$.each(warning, function(index, warn){
